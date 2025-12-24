@@ -94,15 +94,18 @@ if role == "Admin":
 
         for _, r in df.iterrows():
             for d in date_cols:
-                try:
-                    date_str = pd.to_datetime(d).strftime("%Y-%m-%d")
-                except:
+                parsed_date = pd.to_datetime(d, dayfirst=True, errors="coerce")
+                if pd.isna(parsed_date):
                     continue
+
+                date_str = parsed_date.strftime("%Y-%m-%d")
+
                 conn.execute("""
                     INSERT OR REPLACE INTO excel_data
                     VALUES (?,?,?,?,?)
                 """, (
-                    r[valve_col], motor,
+                    r[valve_col],
+                    motor,
                     norm_crop(r[crop_col]),
                     time_to_flow(r[d]),
                     date_str
@@ -110,7 +113,7 @@ if role == "Admin":
 
     if files:
         conn.commit()
-        st.success("Excel uploaded")
+        st.success("Excel uploaded successfully")
 
 # ================= SUPERVISOR =================
 elif role == "Supervisor":
@@ -143,19 +146,22 @@ elif role == "Supervisor":
         if st.button("Save", key=f"s{r.valve}{r.motor}"):
             if remark != "None" and not image_path:
                 st.error("Image required")
-                st.stop()
+            else:
+                final_remark = f"{remark} - {extra}" if extra else remark
 
-            final_remark = f"{remark} - {extra}" if extra else remark
-
-            conn.execute("""
-                INSERT OR REPLACE INTO supervisor_data
-                VALUES (?,?,?,?,?,?)
-            """, (
-                r.valve, r.motor, sel_date_str,
-                flow, final_remark if remark != "None" else "", image_path
-            ))
-            conn.commit()
-            st.success("Saved")
+                conn.execute("""
+                    INSERT OR REPLACE INTO supervisor_data
+                    VALUES (?,?,?,?,?,?)
+                """, (
+                    r.valve,
+                    r.motor,
+                    sel_date_str,
+                    flow,
+                    final_remark if remark != "None" else "",
+                    image_path
+                ))
+                conn.commit()
+                st.success("Saved")
 
 # ================= DASHBOARD =================
 else:
@@ -164,7 +170,6 @@ else:
     ex = df_excel()
     su = df_sup()
 
-    # ===== FILTERS =====
     col1, col2 = st.columns(2)
     with col1:
         remark_filter = st.selectbox("Filter Remark", ["All"] + REMARK_OPTIONS)
@@ -174,7 +179,6 @@ else:
     if remark_filter != "All":
         su = su[su.remarks.str.contains(remark_filter, na=False)]
 
-    # ===== METRICS =====
     st.subheader("📌 Remark Count")
     if not su.empty:
         counts = su.remarks.str.extract(r"(Pipe Leakage|Extra|Other)")[0].value_counts()
@@ -182,12 +186,10 @@ else:
     else:
         st.info("No remarks found")
 
-    # ===== HISTORY TABLE =====
     if show_history and not su.empty:
         st.subheader("📜 Remark History")
         st.dataframe(su[["date", "valve", "motor", "remarks"]])
 
-    # ===== DAILY STATUS GRID =====
     st.subheader("🟢 Daily Status")
 
     ex = ex[ex.date == sel_date_str]
