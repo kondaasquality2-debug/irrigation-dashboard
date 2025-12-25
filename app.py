@@ -7,11 +7,19 @@ from sqlalchemy import create_engine, text
 st.set_page_config(page_title="Irrigation Dashboard", layout="wide")
 
 # ================= DATABASE =================
+import os
+
+if "DATABASE_URL" not in os.environ:
+    st.error("DATABASE_URL not set. Add it in Streamlit Secrets.")
+    st.stop()
+
 @st.cache_resource
 def get_engine():
-    return create_engine("sqlite:///data.db", echo=False)
+    return create_engine(os.environ["DATABASE_URL"])
 
 engine = get_engine()
+@st.cache_resource
+
 
 def run_query(query, params=None):
     with engine.begin() as conn:
